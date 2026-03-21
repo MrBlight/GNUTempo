@@ -1,0 +1,39 @@
+{
+  "version": "1.0.5",
+  "tick_mode": 1,
+  "beats": {
+    "1": {
+      "numerator": 7,
+      "denominator": 8,
+      "bpm": 210.0,
+      "global_swing": 0.0,
+      "paused": false,
+      "active": true,
+      "root": {
+        "id": 4,
+        "duration": [1, 1],
+        "swing_offset": 0.0,
+        "children": [
+          {
+            "id": 1,
+            "duration": [3, 7],
+            "swing_offset": 0.0,
+            "children": []
+          },
+          {
+            "id": 2,
+            "duration": [2, 7],
+            "swing_offset": 0.0,
+            "children": []
+          },
+          {
+            "id": 3,
+            "duration": [2, 7],
+            "swing_offset": 0.0,
+            "children": []
+          }
+        ]
+      }
+    }
+  }
+}
