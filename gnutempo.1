@@ -1,0 +1,269 @@
+.\" GNUTempo Man Page
+.\" Licensed under GPLv3
+.TH GNUTEMPO 1 "2025" "GNUTempo v1.1.0" "User Commands"
+
+.SH NAME
+gnutempo \- Terminal-based minimalist metronome
+
+.SH SYNOPSIS
+.B gnutempo
+[\fIOPTIONS\fR]
+
+.SH DESCRIPTION
+GNUTempo is a free, offline, unrestricted terminal-based metronome written in Python. It supports arbitrary time signatures, layered beats with bar synchronization, swing/groove control, and visual pattern editing.
+
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show command-line help and exit.
+
+.TP
+.BR \-v ", " \-\-version
+Show version information and exit.
+
+.TP
+.BR \-\-debug
+Enable debug mode for diagnostic output.
+
+.TP
+.BR \-b ", " \-\-bpm \fI<value>\fR
+Set starting BPM (default: 120).
+
+.TP
+.BR \-t ", " \-\-time \fI<signature>\fR
+Set time signature, e.g., 4/4, 7/8 (default: 4/4).
+
+.TP
+.BR \-p ", " \-\-preset \fI<name>\fR
+Use preset rhythm pattern. Available presets: rock, jazz, bossa, waltz, funk, samba, triplet, half_time, double_time, seven_eight.
+
+.TP
+.BR \-\-test
+Run self-tests and exit.
+
+.TP
+.BR \-\-list-presets
+List all available presets with descriptions.
+
+.TP
+.BR \-\-no-sound-check
+Skip audio file verification at startup.
+
+.SH INTERACTIVE COMMANDS
+Once running, the following commands are available:
+
+.TP
+.B mkbt ##/## bpm
+Create a beat with specified time signature and tempo.
+
+.TP
+.B sync && mkbt ##/## bpm
+Create a beat synchronized to the next bar of an existing beat.
+
+.TP
+.B p <id>
+Pause a beat by ID.
+
+.TP
+.B r <id>
+Resume a paused beat by ID.
+
+.TP
+.B rm <id>
+Remove a beat by ID.
+
+.TP
+.B lsbt
+List all active beats.
+
+.TP
+.B sanitize [id | all]
+Fix oversized slots in beat patterns.
+
+.TP
+.B patui <id>
+Open the visual pattern editor for a beat.
+
+.TP
+.B swing <id> <value>
+Set global swing (-0.5 to 0.5).
+
+.TP
+.B swing <id> slot <index> <value>
+Set per-slot swing override.
+
+.TP
+.B tkmod <1|2>
+Switch between hi-fi (1) and low-fi (2) sound sets.
+
+.TP
+.B export
+Save all beats to a JSON file.
+
+.TP
+.B import [index]
+Load beats from a JSON file.
+
+.TP
+.B lsjsn
+List available JSON files.
+
+.TP
+.B debug [subcmd]
+Access debug/diagnostic tools. Subcommands: on, off, info, timing, audio, state.
+
+.TP
+.B tap
+Enter tap tempo mode to determine BPM by tapping.
+
+.TP
+.B help
+Show all interactive commands.
+
+.TP
+.B exit / quit
+Exit the program.
+
+.SH PRESETS
+The following preset rhythms are available:
+
+.PP
+.B rock
+\- Basic rock pattern (4/4 @ 120 BPM)
+
+.PP
+.B jazz
+\- Swing pattern (4/4 @ 140 BPM)
+
+.PP
+.B bossa
+\- Bossa nova pattern (4/4 @ 130 BPM)
+
+.PP
+.B waltz
+\- Waltz pattern (3/4 @ 90 BPM)
+
+.PP
+.B funk
+\- Funk pattern with 16th notes (4/4 @ 100 BPM)
+
+.PP
+.B samba
+\- Samba pattern (2/4 @ 160 BPM)
+
+.PP
+.B triplet
+\- Triplet feel (4/4 @ 120 BPM)
+
+.PP
+.B half_time
+\- Half-time rock (4/4 @ 70 BPM)
+
+.PP
+.B double_time
+\- Double-time punk/metal (4/4 @ 180 BPM)
+
+.PP
+.B seven_eight
+\- Progressive 7/8 pattern (7/8 @ 140 BPM)
+
+.SH EXAMPLES
+.nf
+# Start interactive mode
+gnutempo
+
+# Quick start with custom settings
+gnutempo --bpm 120 --time 4/4
+
+# Start with a preset
+gnutempo --preset rock
+
+# Enable debug mode
+gnutempo --debug
+
+# Run self-tests
+gnutempo --test
+
+# List all presets
+gnutempo --list-presets
+.fi
+
+.SH PATTERN EDITOR
+When using \fBpatui\fR, the following keys are available:
+
+.PP
+.B left/right arrows
+Move between slots
+
+.PP
+.B s
+Split a slot (Enter to halve, 1/3 for ratio, =3 for N equal parts)
+
+.PP
+.B m
+Enter merge mode (expand with arrows, Enter to confirm)
+
+.PP
+.B w/W
+Nudge slot swing +/- 0.01
+
+.PP
+.B g/G
+Nudge global swing +/- 0.01
+
+.PP
+.B r
+Reset selected slot swing
+
+.PP
+.B R
+Reset all swing to zero
+
+.PP
+.B x
+Hard reset pattern to equal subdivision
+
+.PP
+.B q/ESC
+Close editor (changes are live immediately)
+
+.SH REQUIREMENTS
+.IP \(bu 2
+Python 3.x
+.IP \(bu 2
+pygame library
+
+.SH FILES
+.IP \(bu 2
+.I bartick.ogg
+\- Bar tick sound (required)
+.IP \(bu 2
+.I tick.ogg
+\- Regular tick sound (required)
+.IP \(bu 2
+.I lbt.ogg
+\- Low-fi bar tick (optional)
+.IP \(bu 2
+.I ltk.ogg
+\- Low-fi tick (optional)
+.IP \(bu 2
+.I *.json
+\- Saved beat patterns
+
+.SH EXIT STATUS
+.IP 0
+Success
+.IP 1
+Error (missing dependencies, failed tests, etc.)
+
+.SH BUGS
+Report bugs at the project repository.
+
+.SH AUTHOR
+MrBlight
+
+.SH LICENSE
+This program is free software licensed under the GNU General Public License v3.0. See the LICENSE file for details.
+
+.SH SEE ALSO
+.BR python3 (1)

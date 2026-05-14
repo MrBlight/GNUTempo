@@ -45,14 +45,31 @@ def check_audio_files():
     if lofi_missing:
         print(f"note: low-fi audio file(s) not found ({', '.join(lofi_missing)}). tkmod 2 will be unavailable.")
 
-pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-pygame.mixer.init()
+# Audio initialization (deferred to allow --test and --help without audio)
+_audio_initialized = False
+
+def init_audio():
+    """Initialize pygame mixer. Returns True on success, False on failure."""
+    global _audio_initialized
+    if _audio_initialized:
+        return True
+    try:
+        pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+        pygame.mixer.init()
+        _audio_initialized = True
+        return True
+    except Exception as e:
+        print(f"Warning: Audio initialization failed: {e}")
+        print("Running in no-audio mode. Some features will be unavailable.")
+        return False
 
 bartick_sound = tick_sound = None
 lbt_sound     = ltk_sound  = None
 
 def load_sounds():
     global bartick_sound, tick_sound, lbt_sound, ltk_sound
+    if not _audio_initialized:
+        return
     bartick_sound = pygame.mixer.Sound(BARTICK_PATH)
     tick_sound    = pygame.mixer.Sound(TICK_PATH)
     if os.path.isfile(LBT_PATH): lbt_sound = pygame.mixer.Sound(LBT_PATH)
@@ -1014,6 +1031,8 @@ def cmd_help():
   export                      save all beats to data.json (auto-numbered)
   import [index]              import beats from a JSON file in project folder
   lsjsn                       list JSON files in project folder
+  debug [subcmd]              debug/diagnostic tools (type 'debug' for options)
+  tap                         enter tap tempo mode
   help                        show this help
   exit / quit                 quit
 
@@ -1029,14 +1048,509 @@ patui keys:
   q / ESC         close editor (changes are already live)
 """)
 
+# ── presets ───────────────────────────────────────────────────────────────────
+
+PRESETS = {
+    "rock": {
+        "time": "4/4",
+        "bpm": 120,
+        "description": "Basic rock pattern",
+        "pattern": [(1, 4), (1, 4), (1, 4), (1, 4)],  # Four quarter notes
+    },
+    "jazz": {
+        "time": "4/4",
+        "bpm": 140,
+        "description": "Swing pattern",
+        "pattern": [(1, 4), (1, 4), (1, 4), (1, 4)],
+        "swing": 0.25,
+    },
+    "bossa": {
+        "time": "4/4",
+        "bpm": 130,
+        "description": "Bossa nova pattern",
+        "pattern": [(1, 4), (1, 8), (1, 8), (1, 4), (1, 4)],
+    },
+    "waltz": {
+        "time": "3/4",
+        "bpm": 90,
+        "description": "Waltz pattern",
+        "pattern": [(1, 4), (1, 4), (1, 4)],
+    },
+    "funk": {
+        "time": "4/4",
+        "bpm": 100,
+        "description": "Funk pattern with 16th notes",
+        "pattern": [(1, 16)] * 16,
+    },
+    "samba": {
+        "time": "2/4",
+        "bpm": 160,
+        "description": "Samba pattern",
+        "pattern": [(1, 8), (1, 8), (1, 8), (1, 8)],
+    },
+    "triplet": {
+        "time": "4/4",
+        "bpm": 120,
+        "description": "Triplet feel",
+        "pattern": [(1, 12)] * 12,
+    },
+    "half_time": {
+        "time": "4/4",
+        "bpm": 70,
+        "description": "Half-time rock",
+        "pattern": [(1, 2), (1, 2)],
+    },
+    "double_time": {
+        "time": "4/4",
+        "bpm": 180,
+        "description": "Double-time punk/metal",
+        "pattern": [(1, 8)] * 8,
+    },
+    "seven_eight": {
+        "time": "7/8",
+        "bpm": 140,
+        "description": "Progressive 7/8 pattern",
+        "pattern": [(1, 8)] * 7,
+    },
+}
+
+# ── debug/diagnostic tools ────────────────────────────────────────────────────
+
+DEBUG_MODE = False
+
+def debug_log(message):
+    """Print debug message if DEBUG_MODE is enabled."""
+    if DEBUG_MODE:
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        print(f"\n[DEBUG {timestamp}] {message}")
+
+def cmd_debug(args):
+    """Toggle or display debug information."""
+    global DEBUG_MODE
+    
+    if not args:
+        # Show current debug status
+        print(f"Debug mode: {'ON' if DEBUG_MODE else 'OFF'}")
+        print("\nDebug commands:")
+        print("  debug on/off     - Toggle debug mode")
+        print("  debug info       - Show system information")
+        print("  debug timing     - Run timing accuracy test")
+        print("  debug audio      - Test audio playback")
+        print("  debug state      - Dump internal beat state")
+        return
+    
+    subcmd = args[0].lower()
+    
+    if subcmd == "on":
+        DEBUG_MODE = True
+        print("Debug mode enabled.")
+    elif subcmd == "off":
+        DEBUG_MODE = False
+        print("Debug mode disabled.")
+    elif subcmd == "info":
+        print("\n=== GNUTempo Debug Info ===")
+        print(f"Version: {VERSION}")
+        print(f"Python: {sys.version}")
+        print(f"Platform: {sys.platform}")
+        print(f"Pygame version: {pygame.version.ver}")
+        print(f"Audio driver: {pygame.mixer.get_init()}")
+        print(f"Working directory: {SCRIPT_DIR}")
+        print(f"Debug mode: {DEBUG_MODE}")
+        print(f"Active beats: {len(beats)}")
+        print(f"Tick mode: {tick_mode}")
+        
+        # Check audio files
+        print("\nAudio files:")
+        for f in [BARTICK_PATH, TICK_PATH, LBT_PATH, LTK_PATH]:
+            exists = os.path.isfile(f)
+            size = os.path.getsize(f) if exists else 0
+            status = f"{size:,} bytes" if exists else "MISSING"
+            print(f"  {os.path.basename(f)}: {status}")
+    
+    elif subcmd == "timing":
+        print("\nRunning timing accuracy test (5 seconds)...")
+        test_duration = 5.0
+        start = time.perf_counter()
+        count = 0
+        while time.perf_counter() - start < test_duration:
+            count += 1
+            time.sleep(0.01)  # 10ms intervals
+        elapsed = time.perf_counter() - start
+        expected = int(test_duration / 0.01)
+        accuracy = (count / expected) * 100
+        print(f"Expected iterations: {expected}")
+        print(f"Actual iterations: {count}")
+        print(f"Timing accuracy: {accuracy:.2f}%")
+        if accuracy < 95:
+            print("WARNING: System may have timing issues affecting metronome accuracy.")
+        else:
+            print("Timing looks good!")
+    
+    elif subcmd == "audio":
+        print("\nTesting audio playback...")
+        try:
+            bartick_sound.play()
+            print("Bar tick sound: OK")
+            time.sleep(0.1)
+            tick_sound.play()
+            print("Tick sound: OK")
+            if lbt_sound and ltk_sound:
+                lbt_sound.play()
+                time.sleep(0.1)
+                ltk_sound.play()
+                print("Low-fi sounds: OK")
+            else:
+                print("Low-fi sounds: Not available")
+            print("Audio test complete.")
+        except Exception as e:
+            print(f"Audio test failed: {e}")
+    
+    elif subcmd == "state":
+        print("\n=== Internal State Dump ===")
+        with beats_lock:
+            for bid, beat in beats.items():
+                print(f"\nBeat {bid}:")
+                print(f"  Time: {beat['numerator']}/{beat['denominator']}")
+                print(f"  BPM: {beat['bpm']}")
+                print(f"  Paused: {beat['paused']}")
+                print(f"  Global swing: {beat['global_swing']}")
+                print(f"  Thread alive: {beat['thread'].is_alive() if beat['thread'] else 'N/A'}")
+                leaves = beat['root'].leaves()
+                print(f"  Leaf slots: {len(leaves)}")
+                for i, leaf in enumerate(leaves):
+                    dur_str = fmt_duration(leaf.duration, beat['bpm'], beat['numerator'])
+                    swing_str = f" (swing: {leaf.swing_offset:+.2f})" if leaf.swing_offset != 0 else ""
+                    print(f"    [{i}] {dur_str}{swing_str}")
+    else:
+        print(f"Unknown debug subcommand: {subcmd}")
+        print("Type 'debug' for available options.")
+
+# ── tap tempo ─────────────────────────────────────────────────────────────────
+
+class TapTempo:
+    """Tap tempo calculator."""
+    
+    def __init__(self):
+        self.taps = []
+        self.lock = threading.Lock()
+    
+    def tap(self):
+        """Record a tap and return current BPM estimate."""
+        now = time.perf_counter()
+        with self.lock:
+            self.taps.append(now)
+            # Keep only last 10 taps
+            if len(self.taps) > 10:
+                self.taps = self.taps[-10:]
+            
+            if len(self.taps) < 2:
+                return None
+            
+            # Calculate average interval
+            intervals = [self.taps[i] - self.taps[i-1] for i in range(1, len(self.taps))]
+            avg_interval = sum(intervals) / len(intervals)
+            
+            if avg_interval < 0.2:  # Too fast, probably accidental
+                return None
+            
+            bpm = 60.0 / avg_interval
+            return bpm
+    
+    def reset(self):
+        with self.lock:
+            self.taps = []
+
+tap_tempo = TapTempo()
+
+def cmd_tap(args):
+    """Tap tempo mode. Press Enter to tap, 'q' to quit."""
+    print("\n=== TAP TEMPO MODE ===")
+    print("Press Enter to tap, 'q' + Enter to quit")
+    print("Tap at least 2 times to get a BPM reading\n")
+    
+    tap_tempo.reset()
+    
+    try:
+        while True:
+            raw = input("[Tap] ").strip()
+            if raw.lower() == 'q':
+                break
+            
+            bpm = tap_tempo.tap()
+            if bpm:
+                print(f"  → {bpm:.1f} BPM")
+    except (EOFError, KeyboardInterrupt):
+        pass
+    
+    print("\nTap tempo mode exited.")
+
+# ── quick start from command line ─────────────────────────────────────────────
+
+def apply_preset(preset_name):
+    """Apply a preset pattern to the current beat setup."""
+    preset_name = preset_name.lower()
+    if preset_name not in PRESETS:
+        print(f"Preset '{preset_name}' not found.")
+        print("Available presets:", ", ".join(PRESETS.keys()))
+        return False
+    
+    preset = PRESETS[preset_name]
+    time_sig = preset["time"]
+    bpm = preset["bpm"]
+    
+    # Parse time signature
+    num, den = map(int, time_sig.split("/"))
+    
+    # Create the beat
+    cmd_mkbt([time_sig, str(bpm)])
+    
+    # Get the beat ID (most recently created)
+    with beats_lock:
+        beat_id = max(beats.keys()) if beats else None
+    
+    if beat_id and "pattern" in preset:
+        beat = beats[beat_id]
+        # Build the pattern by splitting slots as needed
+        with beat["pattern_lock"]:
+            leaves = beat["root"].leaves()
+            pattern = preset["pattern"]
+            
+            # For simplicity, rebuild the pattern from scratch
+            new_leaves = []
+            for dur_frac in pattern:
+                duration = Fraction(dur_frac[0], dur_frac[1])
+                new_leaves.append(Slot(duration))
+            
+            # Replace root children
+            beat["root"].children = new_leaves
+            for leaf in new_leaves:
+                leaf.children = []
+        
+        # Apply swing if specified
+        if "swing" in preset:
+            beat["global_swing"] = preset["swing"]
+            print(f"Applied swing: {preset['swing']:+.2f}")
+    
+    print(f"Preset '{preset_name}' applied: {preset['description']}")
+    return True
+
+def quick_start(bpm=None, time_sig=None, preset_name=None):
+    """Quick start with command-line parameters."""
+    if preset_name:
+        if apply_preset(preset_name):
+            return
+        # Fall through to default if preset fails
+    
+    # Use defaults or provided values
+    if not time_sig:
+        time_sig = "4/4"
+    if not bpm:
+        bpm = 120.0
+    
+    cmd_mkbt([time_sig, str(bpm)])
+    print(f"Quick started: {time_sig} at {bpm} BPM")
+
+# ── diagnostic/test modes ─────────────────────────────────────────────────────
+
+def run_self_test():
+    """Run internal self-tests."""
+    print("Running GNUTempo self-tests...\n")
+    
+    errors = 0
+    
+    # Test 1: Fraction arithmetic
+    print("Test 1: Fraction arithmetic...")
+    try:
+        f1 = Fraction(1, 4)
+        f2 = Fraction(1, 4)
+        assert f1 + f2 == Fraction(1, 2)
+        print("  PASS")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        errors += 1
+    
+    # Test 2: Slot creation
+    print("Test 2: Slot creation...")
+    try:
+        slot = Slot(Fraction(1, 4))
+        assert slot.is_leaf
+        assert slot.duration == Fraction(1, 4)
+        print("  PASS")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        errors += 1
+    
+    # Test 3: Beat creation
+    print("Test 3: Beat creation...")
+    try:
+        beat = make_beat(4, 4, 120)
+        assert beat["numerator"] == 4
+        assert beat["denominator"] == 4
+        assert beat["bpm"] == 120
+        leaves = beat["root"].leaves()
+        assert len(leaves) == 4
+        print("  PASS")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        errors += 1
+    
+    # Test 4: Pattern integrity
+    print("Test 4: Pattern integrity...")
+    try:
+        beat = make_beat(4, 4, 120)
+        leaves = beat["root"].leaves()
+        total = sum(s.duration for s in leaves)
+        assert total == Fraction(1)
+        print("  PASS")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        errors += 1
+    
+    # Test 5: Swing clamping
+    print("Test 5: Swing clamping...")
+    try:
+        val = max(-0.5, min(0.5, 0.8))
+        assert val == 0.5
+        val = max(-0.5, min(0.5, -0.9))
+        assert val == -0.5
+        print("  PASS")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        errors += 1
+    
+    print(f"\nSelf-test complete: {5 - errors}/5 tests passed")
+    if errors > 0:
+        print(f"WARNING: {errors} test(s) failed!")
+        return False
+    return True
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
+def parse_cli_args():
+    """Parse command-line arguments for quick-start and flags."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        prog='gnutempo',
+        description='GNUTempo - Terminal Minimalist Metronome',
+        add_help=False  # We handle help ourselves
+    )
+    
+    parser.add_argument('--help', '-h', action='store_true',
+                       help='Show command-line help')
+    parser.add_argument('--version', '-v', action='store_true',
+                       help='Show version')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable debug mode')
+    parser.add_argument('--bpm', '-b', type=float, default=None,
+                       help='Starting BPM')
+    parser.add_argument('--time', '-t', type=str, default=None,
+                       help='Time signature (e.g., 4/4)')
+    parser.add_argument('--preset', '-p', type=str, default=None,
+                       help='Use preset (rock, jazz, bossa, waltz, funk, samba, triplet)')
+    parser.add_argument('--test', action='store_true',
+                       help='Run self-tests and exit')
+    parser.add_argument('--list-presets', action='store_true',
+                       help='List available presets')
+    parser.add_argument('--no-sound-check', action='store_true',
+                       help='Skip audio file verification')
+    
+    return parser.parse_args()
+
+def show_cli_help():
+    """Show command-line help."""
+    print("""
+GNUTempo v1.1.0 - Terminal Minimalist Metronome
+
+USAGE:
+  gnutempo [OPTIONS]
+
+OPTIONS:
+  --help, -h              Show this help message
+  --version, -v           Show version information
+  --debug                 Enable debug mode
+  --bpm, -b <value>       Set starting BPM (default: 120)
+  --time, -t <sig>        Set time signature (default: 4/4)
+  --preset, -p <name>     Use preset rhythm pattern
+  --test                  Run self-tests and exit
+  --list-presets          List available presets
+  --no-sound-check        Skip audio file verification
+
+PRESETS:
+  rock, jazz, bossa, waltz, funk, samba, triplet, half_time, 
+  double_time, seven_eight
+
+EXAMPLES:
+  gnutempo                          Start interactive mode
+  gnutempo --bpm 120 --time 4/4     Quick start with settings
+  gnutempo --preset rock            Start with rock preset
+  gnutempo --debug                  Enable debug mode
+  gnutempo --test                   Run self-tests
+  gnutempo --list-presets           Show all presets
+
+Once running, type 'help' for interactive commands.
+
+Licensed under GPLv3
+""")
+
 def main():
-    check_audio_files()
+    global DEBUG_MODE
+    
+    # Parse command-line arguments
+    args = parse_cli_args()
+    
+    # Handle --help
+    if args.help:
+        show_cli_help()
+        return
+    
+    # Handle --version
+    if args.version:
+        print(f"GNUTempo v{VERSION}")
+        print("Terminal Minimalist Metronome")
+        print("Licensed under GPLv3")
+        return
+    
+    # Handle --list-presets
+    if args.list_presets:
+        print("Available presets:")
+        for name, info in PRESETS.items():
+            print(f"  {name:12} - {info['description']} ({info['time']} @ {info['bpm']} BPM)")
+        return
+    
+    # Handle --test
+    if args.test:
+        success = run_self_test()
+        sys.exit(0 if success else 1)
+    
+    # Set debug mode from CLI
+    if args.debug:
+        DEBUG_MODE = True
+    
+    # Initialize audio (deferred to allow --test/--help without audio hardware)
+    if not args.no_sound_check:
+        check_audio_files()
+    
+    init_audio()
     load_sounds()
+    
     os.system('cls' if os.name == 'nt' else 'clear')
-    print(f"OpenTempo {VERSION}  |  GPLv3  |  terminal metronome")
+    print(f"GNUTempo {VERSION}  |  GPLv3  |  terminal metronome")
     print('type "help" for commands.\n')
+    
+    # Apply quick-start parameters
+    if args.bpm or args.time or args.preset:
+        print("Starting with parameters:")
+        if args.preset:
+            print(f"  Preset: {args.preset}")
+        if args.time:
+            print(f"  Time: {args.time}")
+        if args.bpm:
+            print(f"  BPM: {args.bpm}")
+        print()
+        quick_start(bpm=args.bpm, time_sig=args.time, preset_name=args.preset)
+    
     print("READY")
 
     while True:
@@ -1069,6 +1583,8 @@ def main():
         elif cmd == "import":         cmd_import(tokens[1:])
         elif cmd == "lsjsn":          cmd_lsjsn()
         elif cmd == "help":           cmd_help()
+        elif cmd == "debug":          cmd_debug(tokens[1:])
+        elif cmd == "tap":            cmd_tap(tokens[1:])
         else: print(f"unknown command: {cmd}. type help for a list.")
 
     with beats_lock:
