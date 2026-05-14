@@ -119,6 +119,17 @@ def get_sounds():
         return lbt_sound, ltk_sound
     return bartick_sound, tick_sound
 
+def play_sound(sound, is_bar=False):
+    """Play a sound using pygame or fallback to winsound."""
+    if sound is not None:
+        # Pygame sound available
+        sound.play()
+    elif WINSOUND_AVAILABLE:
+        # Fallback to Windows beep (440Hz for tick, 880Hz for bar)
+        frequency = 880 if is_bar else 440
+        winsound.Beep(frequency, 50)
+    # else: no audio backend, silently skip
+
 def cmd_tkmod(args):
     global tick_mode
     if not args:
@@ -303,14 +314,12 @@ def beat_loop(beat_id, beat, sync_to_id=None):
             if not paused:
                 bar_snd, tk_snd = get_sounds()
                 if first:
-                    if bar_snd:
-                        bar_snd.play()
+                    play_sound(bar_snd, is_bar=True)
                     beat["bar_event"].set()
                     beat["bar_event"].clear()
                     first = False
                 else:
-                    if tk_snd:
-                        tk_snd.play()
+                    play_sound(tk_snd, is_bar=False)
 
             next_tick += slot_seconds
 
