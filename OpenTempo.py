@@ -9,8 +9,14 @@ import time
 import threading
 import shlex
 import json
-import curses
 from fractions import Fraction
+
+# Optional curses import for pattern editor (not available on Windows by default)
+try:
+    import curses
+    CURSES_AVAILABLE = True
+except ImportError:
+    CURSES_AVAILABLE = False
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
@@ -843,7 +849,7 @@ def patui(stdscr, beat_id):
                             num_now    = beat["numerator"]
                             cursor     = lo
                             merge_mode = False
-                            msg        = f"merged {hi-lo+1} slots into {fmt_duration(combined, bpm_now, num_now)}." 
+                            msg        = f"merged {hi-lo+1} slots into {fmt_duration(combined, bpm_now, num_now)}."
 
         elif key == ord('s'):
             # split modes:
@@ -1002,6 +1008,11 @@ def cmd_patui(args):
     if not args:
         print("usage: patui <beat_id>")
         return
+    if not CURSES_AVAILABLE:
+        print("ERROR: patui requires the 'curses' module, which is not available on your system.")
+        print("       The pattern editor (patui) only works on Linux/macOS/BSD.")
+        print("       On Windows, you can edit patterns by importing/exporting JSON files.")
+        return
     try:    bid = int(args[0])
     except: print("beat id must be an integer."); return
     with beats_lock:
@@ -1128,7 +1139,7 @@ def debug_log(message):
 def cmd_debug(args):
     """Toggle or display debug information."""
     global DEBUG_MODE
-    
+
     if not args:
         # Show current debug status
         print(f"Debug mode: {'ON' if DEBUG_MODE else 'OFF'}")
@@ -1139,9 +1150,9 @@ def cmd_debug(args):
         print("  debug audio      - Test audio playback")
         print("  debug state      - Dump internal beat state")
         return
-    
+
     subcmd = args[0].lower()
-    
+
     if subcmd == "on":
         DEBUG_MODE = True
         print("Debug mode enabled.")
@@ -1159,7 +1170,7 @@ def cmd_debug(args):
         print(f"Debug mode: {DEBUG_MODE}")
         print(f"Active beats: {len(beats)}")
         print(f"Tick mode: {tick_mode}")
-        
+
         # Check audio files
         print("\nAudio files:")
         for f in [BARTICK_PATH, TICK_PATH, LBT_PATH, LTK_PATH]:
@@ -1167,7 +1178,7 @@ def cmd_debug(args):
             size = os.path.getsize(f) if exists else 0
             status = f"{size:,} bytes" if exists else "MISSING"
             print(f"  {os.path.basename(f)}: {status}")
-    
+
     elif subcmd == "timing":
         print("\nRunning timing accuracy test (5 seconds)...")
         test_duration = 5.0
@@ -1186,7 +1197,7 @@ def cmd_debug(args):
             print("WARNING: System may have timing issues affecting metronome accuracy.")
         else:
             print("Timing looks good!")
-    
+
     elif subcmd == "audio":
         print("\nTesting audio playback...")
         try:
@@ -1205,7 +1216,7 @@ def cmd_debug(args):
             print("Audio test complete.")
         except Exception as e:
             print(f"Audio test failed: {e}")
-    
+
     elif subcmd == "state":
         print("\n=== Internal State Dump ===")
         with beats_lock:
@@ -1230,11 +1241,11 @@ def cmd_debug(args):
 
 class TapTempo:
     """Tap tempo calculator."""
-    
+
     def __init__(self):
         self.taps = []
         self.lock = threading.Lock()
-    
+
     def tap(self):
         """Record a tap and return current BPM estimate."""
         now = time.perf_counter()
@@ -1243,20 +1254,20 @@ class TapTempo:
             # Keep only last 10 taps
             if len(self.taps) > 10:
                 self.taps = self.taps[-10:]
-            
+
             if len(self.taps) < 2:
                 return None
-            
+
             # Calculate average interval
             intervals = [self.taps[i] - self.taps[i-1] for i in range(1, len(self.taps))]
             avg_interval = sum(intervals) / len(intervals)
-            
+
             if avg_interval < 0.2:  # Too fast, probably accidental
                 return None
-            
+
             bpm = 60.0 / avg_interval
             return bpm
-    
+
     def reset(self):
         with self.lock:
             self.taps = []
@@ -1268,21 +1279,21 @@ def cmd_tap(args):
     print("\n=== TAP TEMPO MODE ===")
     print("Press Enter to tap, 'q' + Enter to quit")
     print("Tap at least 2 times to get a BPM reading\n")
-    
+
     tap_tempo.reset()
-    
+
     try:
         while True:
             raw = input("[Tap] ").strip()
             if raw.lower() == 'q':
                 break
-            
+
             bpm = tap_tempo.tap()
             if bpm:
                 print(f"  → {bpm:.1f} BPM")
     except (EOFError, KeyboardInterrupt):
         pass
-    
+
     print("\nTap tempo mode exited.")
 
 # ── quick start from command line ─────────────────────────────────────────────
@@ -1294,44 +1305,44 @@ def apply_preset(preset_name):
         print(f"Preset '{preset_name}' not found.")
         print("Available presets:", ", ".join(PRESETS.keys()))
         return False
-    
+
     preset = PRESETS[preset_name]
     time_sig = preset["time"]
     bpm = preset["bpm"]
-    
+
     # Parse time signature
     num, den = map(int, time_sig.split("/"))
-    
+
     # Create the beat
     cmd_mkbt([time_sig, str(bpm)])
-    
+
     # Get the beat ID (most recently created)
     with beats_lock:
         beat_id = max(beats.keys()) if beats else None
-    
+
     if beat_id and "pattern" in preset:
         beat = beats[beat_id]
         # Build the pattern by splitting slots as needed
         with beat["pattern_lock"]:
             leaves = beat["root"].leaves()
             pattern = preset["pattern"]
-            
+
             # For simplicity, rebuild the pattern from scratch
             new_leaves = []
             for dur_frac in pattern:
                 duration = Fraction(dur_frac[0], dur_frac[1])
                 new_leaves.append(Slot(duration))
-            
+
             # Replace root children
             beat["root"].children = new_leaves
             for leaf in new_leaves:
                 leaf.children = []
-        
+
         # Apply swing if specified
         if "swing" in preset:
             beat["global_swing"] = preset["swing"]
             print(f"Applied swing: {preset['swing']:+.2f}")
-    
+
     print(f"Preset '{preset_name}' applied: {preset['description']}")
     return True
 
@@ -1341,13 +1352,13 @@ def quick_start(bpm=None, time_sig=None, preset_name=None):
         if apply_preset(preset_name):
             return
         # Fall through to default if preset fails
-    
+
     # Use defaults or provided values
     if not time_sig:
         time_sig = "4/4"
     if not bpm:
         bpm = 120.0
-    
+
     cmd_mkbt([time_sig, str(bpm)])
     print(f"Quick started: {time_sig} at {bpm} BPM")
 
@@ -1356,9 +1367,9 @@ def quick_start(bpm=None, time_sig=None, preset_name=None):
 def run_self_test():
     """Run internal self-tests."""
     print("Running GNUTempo self-tests...\n")
-    
+
     errors = 0
-    
+
     # Test 1: Fraction arithmetic
     print("Test 1: Fraction arithmetic...")
     try:
@@ -1369,7 +1380,7 @@ def run_self_test():
     except Exception as e:
         print(f"  FAIL: {e}")
         errors += 1
-    
+
     # Test 2: Slot creation
     print("Test 2: Slot creation...")
     try:
@@ -1380,7 +1391,7 @@ def run_self_test():
     except Exception as e:
         print(f"  FAIL: {e}")
         errors += 1
-    
+
     # Test 3: Beat creation
     print("Test 3: Beat creation...")
     try:
@@ -1394,7 +1405,7 @@ def run_self_test():
     except Exception as e:
         print(f"  FAIL: {e}")
         errors += 1
-    
+
     # Test 4: Pattern integrity
     print("Test 4: Pattern integrity...")
     try:
@@ -1406,7 +1417,7 @@ def run_self_test():
     except Exception as e:
         print(f"  FAIL: {e}")
         errors += 1
-    
+
     # Test 5: Swing clamping
     print("Test 5: Swing clamping...")
     try:
@@ -1418,7 +1429,7 @@ def run_self_test():
     except Exception as e:
         print(f"  FAIL: {e}")
         errors += 1
-    
+
     print(f"\nSelf-test complete: {5 - errors}/5 tests passed")
     if errors > 0:
         print(f"WARNING: {errors} test(s) failed!")
@@ -1430,13 +1441,13 @@ def run_self_test():
 def parse_cli_args():
     """Parse command-line arguments for quick-start and flags."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         prog='gnutempo',
         description='GNUTempo - Terminal Minimalist Metronome',
         add_help=False  # We handle help ourselves
     )
-    
+
     parser.add_argument('--help', '-h', action='store_true',
                        help='Show command-line help')
     parser.add_argument('--version', '-v', action='store_true',
@@ -1455,7 +1466,7 @@ def parse_cli_args():
                        help='List available presets')
     parser.add_argument('--no-sound-check', action='store_true',
                        help='Skip audio file verification')
-    
+
     return parser.parse_args()
 
 def show_cli_help():
@@ -1478,7 +1489,7 @@ OPTIONS:
   --no-sound-check        Skip audio file verification
 
 PRESETS:
-  rock, jazz, bossa, waltz, funk, samba, triplet, half_time, 
+  rock, jazz, bossa, waltz, funk, samba, triplet, half_time,
   double_time, seven_eight
 
 EXAMPLES:
@@ -1496,49 +1507,49 @@ Licensed under GPLv3
 
 def main():
     global DEBUG_MODE
-    
+
     # Parse command-line arguments
     args = parse_cli_args()
-    
+
     # Handle --help
     if args.help:
         show_cli_help()
         return
-    
+
     # Handle --version
     if args.version:
         print(f"GNUTempo v{VERSION}")
         print("Terminal Minimalist Metronome")
         print("Licensed under GPLv3")
         return
-    
+
     # Handle --list-presets
     if args.list_presets:
         print("Available presets:")
         for name, info in PRESETS.items():
             print(f"  {name:12} - {info['description']} ({info['time']} @ {info['bpm']} BPM)")
         return
-    
+
     # Handle --test
     if args.test:
         success = run_self_test()
         sys.exit(0 if success else 1)
-    
+
     # Set debug mode from CLI
     if args.debug:
         DEBUG_MODE = True
-    
+
     # Initialize audio (deferred to allow --test/--help without audio hardware)
     if not args.no_sound_check:
         check_audio_files()
-    
+
     init_audio()
     load_sounds()
-    
+
     os.system('cls' if os.name == 'nt' else 'clear')
     print(f"GNUTempo {VERSION}  |  GPLv3  |  terminal metronome")
     print('type "help" for commands.\n')
-    
+
     # Apply quick-start parameters
     if args.bpm or args.time or args.preset:
         print("Starting with parameters:")
@@ -1550,7 +1561,7 @@ def main():
             print(f"  BPM: {args.bpm}")
         print()
         quick_start(bpm=args.bpm, time_sig=args.time, preset_name=args.preset)
-    
+
     print("READY")
 
     while True:
