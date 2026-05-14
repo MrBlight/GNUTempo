@@ -1,10 +1,12 @@
-# OpenTempo
+# GNUTempo
 
 A minimalist terminal metronome built in Python. No GUI, no internet connection required, no bloat.
 
 ## Why I made this
 
 Every metronome app I tried was either locked behind a paywall, required an internet connection, limited you to certain time signatures, or just did not work the way a musician actually thinks. Physical metronomes have the same problem. I wanted something I could use however I felt, on my own terms, that respected my freedom as a user. So I built one.
+
+Note that this program was previously reffered to as OpenTempo, for simplicity most refferences to that previous name has been unchanged.
 
 ## What it does
 
