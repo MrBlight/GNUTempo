@@ -25,9 +25,27 @@ Note that this program was previously referred to as OpenTempo, for simplicity m
 
 ## Installation
 
-### Quick Install (Linux/macOS/BSD)
+### Windows
+**No pygame needed!** GNUTempo works with Windows built-in sound.
 
+1. Ensure Python is installed (add to PATH during installation).
+2. Double-click `install.bat` or run it in Command Prompt.
+3. Follow the on-screen instructions to add the program to your system PATH.
+4. Once installed, open a new terminal and run:
+   ```cmd
+   gnutempo start
+   ```
+
+**Optional:** For enhanced audio quality, you can install pygame:
+```cmd
+pip install pygame
+```
+Note: Python 3.12 or earlier is recommended for pygame compatibility.
+
+### Linux / macOS / BSD
+Run the shell installer:
 ```bash
+chmod +x install.sh
 ./install.sh
 ```
 
@@ -42,12 +60,17 @@ For system-wide installation:
 sudo ./install.sh
 ```
 
+Then run:
+```bash
+gnutempo start
+```
+
 ### Manual Installation
 
-**Requirements:** Python 3 and pygame.
+**Requirements:** Python 3. Pygame is optional (uses system beep if not available).
 
 ```bash
-pip install pygame
+pip install pygame  # Optional, for better audio quality
 ```
 
 Place `OpenTempo.py`, `bartick.ogg`, and `tick.ogg` in the same folder. Optionally add `lbt.ogg` and `ltk.ogg` for the low-fi tick mode. Then run:
