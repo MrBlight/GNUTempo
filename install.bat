@@ -1,15 +1,12 @@
 @echo off
-REM GNUTempo Windows Installer
-REM Installs GNUTempo as a system command on Windows
+setlocal EnableDelayedExpansion
 
-setlocal enabledelayedexpansion
-
-echo ========================================
+echo ==========================================
 echo   GNUTempo Windows Installer
-echo ========================================
+echo ==========================================
 echo.
 
-REM Check if Python is installed
+:: 1. Check if Python is installed
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Python is not installed or not in PATH.
@@ -19,140 +16,54 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [OK] Python found
-python --version
-echo.
+echo [OK] Python found.
+python -c "import sys; print('Version:', sys.version)"
 
-REM Check if pygame is installed
-python -c "import pygame" >nul 2>&1
+:: 2. Install dependencies (pygame)
+echo.
+echo Installing dependencies (pygame)...
+pip install pygame
 if %errorlevel% neq 0 (
-    echo [INFO] Installing pygame dependency...
-    pip install pygame
-    if %errorlevel% neq 0 (
-        echo [ERROR] Failed to install pygame. Please run: pip install pygame
-        pause
-        exit /b 1
-    )
-    echo [OK] pygame installed successfully
+    echo [WARNING] Failed to install pygame automatically.
+    echo Please run: pip install pygame
 ) else (
-    echo [OK] pygame already installed
+    echo [OK] Dependencies installed.
 )
-echo.
 
-REM Get the directory where this script is located
+:: 3. Create the 'gnutempo' command wrapper
+echo.
+echo Creating system command...
 set "SCRIPT_DIR=%~dp0"
-set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+set "WRAPPER_FILE=%SCRIPT_DIR%gnutempo.cmd"
 
-REM Determine installation directory
-set "INSTALL_DIR=%USERPROFILE%\gnutempo"
-set "BIN_DIR=%USERPROFILE%\AppData\Local\Programs\GNUTempo"
-
-echo [INFO] Installation directory: %INSTALL_DIR%
-echo [INFO] Binary directory: %BIN_DIR%
-echo.
-
-REM Create installation directories
-if not exist "%INSTALL_DIR%" (
-    mkdir "%INSTALL_DIR%"
-    echo [OK] Created installation directory
-)
-
-if not exist "%BIN_DIR%" (
-    mkdir "%BIN_DIR%"
-    echo [OK] Created binary directory
-)
-
-REM Copy main Python script
-echo [INFO] Copying OpenTempo.py to installation directory...
-copy /Y "%SCRIPT_DIR%\OpenTempo.py" "%INSTALL_DIR%\gnutempo.py" >nul
-if %errorlevel% neq 0 (
-    echo [ERROR] Failed to copy OpenTempo.py
-    pause
-    exit /b 1
-)
-echo [OK] Copied OpenTempo.py
-
-REM Create wrapper batch file
-echo [INFO] Creating gnutempo.bat wrapper...
 (
-echo @echo off
-echo REM GNUTempo Wrapper Script
-echo set "GNUTEMPO_DIR=%INSTALL_DIR%"
-echo python "%%GNUTEMPO_DIR%%\gnutempo.py" %%*
-) > "%BIN_DIR%\gnutempo.bat"
-echo [OK] Created gnutempo.bat
-echo.
+    echo @echo off
+    echo python "%SCRIPT_DIR%OpenTempo.py" %%*
+) > "!WRAPPER_FILE!"
 
-REM Add BIN_DIR to PATH (user-level)
-echo [INFO] Adding GNUTempo to PATH...
-reg query "HKCU\Environment" /v Path >nul 2>&1
-if %errorlevel% neq 0 (
-    reg add "HKCU\Environment" /v Path /t REG_EXPAND_SZ /d "" /f >nul
-)
+echo [OK] Created wrapper script: gnutempo.cmd
 
-for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "CURRENT_PATH=%%B"
-
-echo !CURRENT_PATH! | findstr /C:"%BIN_DIR%" >nul
-if %errorlevel% neq 0 (
-    if "!CURRENT_PATH!"=="" (
-        reg add "HKCU\Environment" /v Path /t REG_EXPAND_SZ /d "%BIN_DIR%" /f >nul
-    ) else (
-        reg add "HKCU\Environment" /v Path /t REG_EXPAND_SZ /d "!CURRENT_PATH!;%BIN_DIR%" /f >nul
-    )
-    echo [OK] Added GNUTempo to PATH
-    echo.
-    echo [NOTE] You may need to restart your terminal or log out/in for PATH changes to take effect.
-) else (
-    echo [OK] GNUTempo already in PATH
-)
+:: 4. Instructions for PATH
 echo.
-
-REM Create uninstaller
-echo [INFO] Creating uninstaller...
-(
-echo @echo off
-echo echo Removing GNUTempo installation...
+echo ==========================================
+echo   INSTALLATION COMPLETE
+echo ==========================================
 echo.
-echo del /Q "%INSTALL_DIR%\gnutempo.py"
-echo rmdir "%INSTALL_DIR%" 2^>nul
-echo del /Q "%BIN_DIR%\gnutempo.bat"
+echo To run 'gnutempo' from any terminal, you need to add this folder to your PATH.
 echo.
-echo echo To remove GNUTempo from PATH, manually edit environment variables:
-echo echo   - Right-click 'This PC' ^> Properties ^> Advanced system settings
-echo echo   - Environment Variables ^> User variables ^> Path
-echo echo   - Remove: %BIN_DIR%
+echo Current Folder: %SCRIPT_DIR%
 echo.
-echo echo GNUTempo uninstalled.
-echo pause
-) > "%BIN_DIR%\uninstall-gnutempo.bat"
-echo [OK] Created uninstaller
+echo OPTION A (Easy): Run this script from this folder always.
+echo   Usage: .\gnutempo start
 echo.
-
-REM Test installation
-echo [INFO] Testing installation...
-call "%BIN_DIR%\gnutempo.bat" --version >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [OK] Installation successful!
-) else (
-    echo [WARNING] Version check failed, but installation may still work.
-)
+echo OPTION B (System-wide): Add this folder to your Environment Variables.
+echo   1. Press Win+R, type 'sysdm.cpl', hit Enter.
+echo   2. Go to 'Advanced' tab -> 'Environment Variables'.
+echo   3. Under 'User variables', find 'Path', select it, click 'Edit'.
+echo   4. Click 'New' and paste: %SCRIPT_DIR%
+echo   5. Click OK on all windows.
+echo   6. Restart your terminal.
 echo.
-
-echo ========================================
-echo   Installation Complete!
-echo ========================================
-echo.
-echo Usage:
-echo   gnutempo              - Start interactive mode
-echo   gnutempo start        - Start metronome
-echo   gnutempo --preset jazz - Start with jazz preset
-echo   gnutempo --help       - Show all options
-echo.
-echo Uninstall: Run uninstall-gnutempo.bat from:
-echo   %BIN_DIR%
-echo.
-echo [NOTE] If 'gnutempo' command doesn't work yet, try:
-echo   1. Close and reopen your terminal/PowerShell
-echo   2. Or use full path: "%BIN_DIR%\gnutempo.bat"
+echo After Option B, you can run 'gnutempo' from anywhere!
 echo.
 pause
