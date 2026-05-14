@@ -1,1 +1,1 @@
-Nothing to output - the modified file is just README.md which is a source/config file and doesn't require any gitignore entries.
+Nothing should be ignored since only a Python source file (OpenTempo.py) was modified and there are no build artifacts, dependencies, or temporary files in the changes.
