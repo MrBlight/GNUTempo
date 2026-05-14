@@ -22,25 +22,45 @@ Note that this program was previously referred to as OpenTempo, for simplicity m
 - **NEW**: Command-line flags for quick start without interactive setup
 - **NEW**: Self-test mode to verify installation
 
-
 ## Installation
 
 ### Windows
-**No pygame needed!** GNUTempo works with Windows built-in sound.
 
-1. Ensure Python is installed (add to PATH during installation).
-2. Double-click `install.bat` or run it in Command Prompt.
-3. Follow the on-screen instructions to add the program to your system PATH.
-4. Once installed, open a new terminal and run:
+**Important:** Do NOT double-click `OpenTempo.py` directly - it will open and close immediately.
+
+#### Option 1: Quick Start (Recommended)
+Create a batch file to run the program:
+
+1. Create a new text file named `run-gnutempo.bat` in the same folder as `OpenTempo.py`
+2. Paste this code inside:
+   ```batch
+   @echo off
+   python OpenTempo.py
+   pause
+   ```
+3. Save and double-click `run-gnutempo.bat` to run the program
+
+This keeps the window open so you can see any errors or use the interface.
+
+#### Option 2: Install as System Command
+1. Ensure Python 3.12 or earlier is installed (required for pygame compatibility)
+   - Download from: https://www.python.org/downloads/release/python-3129/
+   - **Check "Add Python to PATH" during installation**
+2. Open Command Prompt and install pygame:
+   ```cmd
+   pip install pygame
+   ```
+3. Run the installer:
+   ```cmd
+   install.bat
+   ```
+4. Follow the instructions to add GNUTempo to your PATH
+5. Open a new terminal and run:
    ```cmd
    gnutempo start
    ```
 
-**Optional:** For enhanced audio quality, you can install pygame:
-```cmd
-pip install pygame
-```
-Note: Python 3.12 or earlier is recommended for pygame compatibility.
+**Note:** If using Python 3.13 or later, pygame may not work. The program will still run using Windows built-in beep sounds, but audio quality will be reduced.
 
 ### Linux / macOS / BSD
 Run the shell installer:
