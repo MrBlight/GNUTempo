@@ -58,7 +58,7 @@ echo   Usage: .\gnutempo start
 echo.
 echo OPTION B (System-wide): Add this folder to your Environment Variables.
 echo   1. Press Win+R, type 'sysdm.cpl', hit Enter.
-echo   2. Go to 'Advanced' tab -^> 'Environment Variables'.
+echo   2. Go to 'Advanced' tab -> 'Environment Variables'.
 echo   3. Under 'User variables', find 'Path', select it, click 'Edit'.
 echo   4. Click 'New' and paste: %SCRIPT_DIR%
 echo   5. Click OK on all windows.
