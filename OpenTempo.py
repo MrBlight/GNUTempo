@@ -10,6 +10,7 @@ import threading
 import shlex
 import json
 from fractions import Fraction
+import platform
 
 # Optional curses import for pattern editor (not available on Windows by default)
 try:
@@ -18,8 +19,23 @@ try:
 except ImportError:
     CURSES_AVAILABLE = False
 
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-import pygame
+# Audio backend selection - make pygame optional
+PYGAME_AVAILABLE = False
+try:
+    os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    pass
+
+# Windows built-in sound as fallback
+WINSOUND_AVAILABLE = False
+if platform.system() == 'Windows':
+    try:
+        import winsound
+        WINSOUND_AVAILABLE = True
+    except ImportError:
+        pass
 
 # ── audio setup ───────────────────────────────────────────────────────────────
 
@@ -55,19 +71,30 @@ def check_audio_files():
 _audio_initialized = False
 
 def init_audio():
-    """Initialize pygame mixer. Returns True on success, False on failure."""
+    """Initialize audio backend. Returns True on success, False on failure."""
     global _audio_initialized
     if _audio_initialized:
         return True
-    try:
-        pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-        pygame.mixer.init()
+
+    # Try pygame first
+    if PYGAME_AVAILABLE:
+        try:
+            pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+            pygame.mixer.init()
+            _audio_initialized = True
+            return True
+        except Exception as e:
+            print(f"Warning: Pygame audio initialization failed: {e}")
+
+    # Fallback to Windows built-in sound
+    if WINSOUND_AVAILABLE:
+        print("Using Windows built-in sound (beep) as audio backend.")
         _audio_initialized = True
         return True
-    except Exception as e:
-        print(f"Warning: Audio initialization failed: {e}")
-        print("Running in no-audio mode. Some features will be unavailable.")
-        return False
+
+    print("Warning: No audio backend available.")
+    print("Running in no-audio mode. Some features will be unavailable.")
+    return False
 
 bartick_sound = tick_sound = None
 lbt_sound     = ltk_sound  = None
@@ -76,10 +103,13 @@ def load_sounds():
     global bartick_sound, tick_sound, lbt_sound, ltk_sound
     if not _audio_initialized:
         return
-    bartick_sound = pygame.mixer.Sound(BARTICK_PATH)
-    tick_sound    = pygame.mixer.Sound(TICK_PATH)
-    if os.path.isfile(LBT_PATH): lbt_sound = pygame.mixer.Sound(LBT_PATH)
-    if os.path.isfile(LTK_PATH): ltk_sound = pygame.mixer.Sound(LTK_PATH)
+
+    # Only load pygame sounds if pygame is available
+    if PYGAME_AVAILABLE:
+        bartick_sound = pygame.mixer.Sound(BARTICK_PATH)
+        tick_sound    = pygame.mixer.Sound(TICK_PATH)
+        if os.path.isfile(LBT_PATH): lbt_sound = pygame.mixer.Sound(LBT_PATH)
+        if os.path.isfile(LTK_PATH): ltk_sound = pygame.mixer.Sound(LTK_PATH)
 
 def get_sounds():
     """Return (bar_tick, tick) for the current tick mode."""
@@ -273,12 +303,14 @@ def beat_loop(beat_id, beat, sync_to_id=None):
             if not paused:
                 bar_snd, tk_snd = get_sounds()
                 if first:
-                    bar_snd.play()
+                    if bar_snd:
+                        bar_snd.play()
                     beat["bar_event"].set()
                     beat["bar_event"].clear()
                     first = False
                 else:
-                    tk_snd.play()
+                    if tk_snd:
+                        tk_snd.play()
 
             next_tick += slot_seconds
 
@@ -1164,8 +1196,13 @@ def cmd_debug(args):
         print(f"Version: {VERSION}")
         print(f"Python: {sys.version}")
         print(f"Platform: {sys.platform}")
-        print(f"Pygame version: {pygame.version.ver}")
-        print(f"Audio driver: {pygame.mixer.get_init()}")
+        if PYGAME_AVAILABLE:
+            print(f"Pygame version: {pygame.version.ver}")
+            print(f"Audio driver: {pygame.mixer.get_init()}")
+        elif WINSOUND_AVAILABLE:
+            print("Audio backend: Windows built-in sound (winsound)")
+        else:
+            print("Audio backend: None available")
         print(f"Working directory: {SCRIPT_DIR}")
         print(f"Debug mode: {DEBUG_MODE}")
         print(f"Active beats: {len(beats)}")
@@ -1200,12 +1237,25 @@ def cmd_debug(args):
 
     elif subcmd == "audio":
         print("\nTesting audio playback...")
+        if not PYGAME_AVAILABLE:
+            print("Pygame not available - using Windows built-in sound")
+            if WINSOUND_AVAILABLE:
+                winsound.Beep(440, 100)
+                time.sleep(0.1)
+                winsound.Beep(880, 100)
+                print("Beep sounds: OK")
+            else:
+                print("No audio backend available")
+            return
+
         try:
-            bartick_sound.play()
-            print("Bar tick sound: OK")
-            time.sleep(0.1)
-            tick_sound.play()
-            print("Tick sound: OK")
+            if bartick_sound:
+                bartick_sound.play()
+                print("Bar tick sound: OK")
+                time.sleep(0.1)
+            if tick_sound:
+                tick_sound.play()
+                print("Tick sound: OK")
             if lbt_sound and ltk_sound:
                 lbt_sound.play()
                 time.sleep(0.1)
@@ -1601,7 +1651,10 @@ def main():
     with beats_lock:
         for b in beats.values():
             b["stop_event"].set()
-    pygame.mixer.quit()
+
+    if PYGAME_AVAILABLE:
+        pygame.mixer.quit()
+
 
 if __name__ == "__main__":
     main()
