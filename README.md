@@ -24,6 +24,14 @@ Note that this program was previously referred to as OpenTempo, for simplicity m
 
 ## Installation
 
+### Windows
+1. Ensure Python is installed (add to PATH during installation).
+2. Double-click `install.bat` or run it in Command Prompt.
+3. Follow the on-screen instructions to add the program to your system PATH.
+4. Once installed, open a new terminal and run:
+   ```cmd
+   gnutempo start
+   
 ### Quick Install (Linux/macOS/BSD)
 
 ```bash
